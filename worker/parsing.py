@@ -2,6 +2,11 @@ import io,os,re,socket,struct,subprocess,tempfile,zipfile
 from pathlib import Path
 from transport import ProcessingError
 
+def validate_file(data,kind):
+    if not data or len(data)>20*1024*1024:raise ProcessingError('FILE_SIZE_INVALID')
+    signature=b'%PDF-' if kind=='pdf' else b'PK\x03\x04'
+    if kind not in ('pdf','docx','pptx') or not data.startswith(signature):raise ProcessingError('INVALID_SIGNATURE')
+
 def scan(data):
     host=os.getenv('CLAMAV_HOST','clamav');port=int(os.getenv('CLAMAV_PORT','3310'))
     try:

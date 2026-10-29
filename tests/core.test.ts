@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildChunks, keywordRank, validateAnswer, selectEvidence, estimateReservation, validateUpload } from '../src/lib/domain';
 import type { DocumentDetail, Evidence } from '../src/lib/types';
 import { ensureEmbeddings } from '../src/lib/embedding-import';
+import { uploadSchema } from '../src/lib/upload';
 
 const doc: DocumentDetail = {id:'d',title:'市场价值',filename:'lesson.pdf',type:'pdf',subtitle:'',version:1,status:'ready',sourcePages:1,sourceDate:null,sections:[{id:'s',title:'市场价值',source:'PDF 第 2 页',pairs:[{id:'p1',en:'Market value is an estimated amount.',zh:'市场价值是估计的金额。',kind:'text'},{id:'p2',en:'WALE means weighted average lease expiry.',zh:'WALE 指加权平均租约到期年限。',kind:'text'}]}]};
 const evidence: Evidence = {id:'c1',documentId:'d',documentTitle:'市场价值',filename:'lesson.pdf',source:'PDF 第 2 页',sectionId:'s',pairIds:['p1'],en:doc.sections[0].pairs[0].en,zh:doc.sections[0].pairs[0].zh,version:1,score:1};
@@ -31,6 +32,12 @@ test('upload validation rejects disguised extension, empty and oversized files',
   assert.throws(()=>validateUpload('a.pdf',0,'application/pdf'));
   assert.throws(()=>validateUpload('a.pdf',21*1024*1024,'application/pdf'));
   assert.equal(validateUpload('original.pdf',100,'application/pdf'),'pdf');
+});
+
+test('direct upload metadata rejects arbitrary paths, hashes, fractional and oversized lengths',()=>{
+  const valid={filename:'lesson.pdf',size:6*1024*1024,mime:'application/pdf',sha256:'a'.repeat(64)};
+  assert.ok(uploadSchema.safeParse(valid).success);
+  for(const bad of [{...valid,size:21*1024*1024},{...valid,size:1.5},{...valid,sha256:'abc'},{...valid,mime:'text/html'},{...valid,path:'other/file.pdf'},{...valid,filename:'payload.exe'}])assert.equal(uploadSchema.safeParse(bad).success,false);
 });
 
 test('indexing resumes after a failed batch without repeating paid completed work',async()=>{

@@ -1,8 +1,10 @@
-import hashlib,json,os,time,uuid,math
+import hashlib,json,os,time,uuid,math,signal,threading
+from pathlib import Path
 from transport import Backend,Bailian,ProcessingError
-from parsing import scan,extract
+from parsing import scan,extract,validate_file
 
 def digest(s):return hashlib.sha256(s.encode()).hexdigest()
+def health_tick():Path('/tmp/cpv-worker-heartbeat').touch()
 def validate_translations(raw,expected):
     result=raw.get('translations')
     if not isinstance(result,list) or len(result)!=len(expected):raise ProcessingError('TRANSLATION_INVALID')
@@ -20,8 +22,10 @@ def process(backend,doc):
         if time.monotonic()-last_renew>30:
             if not backend.rpc('cpv_renew_job',{'p_document':doc['id'],'p_lease':doc['lease_token']}):raise ProcessingError('LEASE_LOST')
             last_renew=time.monotonic()
+            health_tick()
     raw=backend.request('/storage/v1/object/cpv-originals/'+doc['storage_path'],raw=True)
     if len(raw)!=doc['byte_size'] or hashlib.sha256(raw).hexdigest()!=doc['sha256']:raise ProcessingError('CHECKSUM_MISMATCH')
+    validate_file(raw,doc['file_type'])
     scan(raw);heartbeat();sections=extract(raw,doc['file_type'],heartbeat)
     translation_model=os.getenv('BAILIAN_TRANSLATE_MODEL','qwen-flash')
     pending=[]
@@ -73,12 +77,15 @@ def process(backend,doc):
     backend.rpc('cpv_finish_job',{'p_document':doc['id'],'p_lease':doc['lease_token'],'p_content':{'sections':sections},'p_chunks':chunks,'p_pages':len(sections),'p_pairs':sum(len(s['pairs']) for s in sections)})
 
 def main():
+    stopping=threading.Event()
+    signal.signal(signal.SIGTERM,lambda *_:stopping.set())
     backend=Backend();print(json.dumps({'event':'worker_started'}),flush=True)
-    while True:
+    while not stopping.is_set():
         doc=None
         try:
             jobs=backend.rpc('cpv_claim_job',{})
-            if not jobs:time.sleep(max(2,int(os.getenv('WORKER_POLL_SECONDS','5'))));continue
+            health_tick()
+            if not jobs:stopping.wait(max(2,int(os.getenv('WORKER_POLL_SECONDS','15'))));continue
             doc=jobs[0];process(backend,doc)
             print(json.dumps({'event':'document_processed','id':doc['id']}),flush=True)
         except KeyboardInterrupt:return
@@ -88,6 +95,6 @@ def main():
             if doc:
                 try:backend.rpc('cpv_finish_job',{'p_document':doc['id'],'p_lease':doc['lease_token'],'p_content':{},'p_chunks':[],'p_pages':0,'p_pairs':0,'p_error':code})
                 except Exception:pass  # Lease may have been revoked or reclaimed; never overwrite its new owner.
-            time.sleep(10)
+            stopping.wait(10)
 
 if __name__=='__main__':main()

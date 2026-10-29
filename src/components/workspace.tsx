@@ -3,6 +3,8 @@ import { useCallback,useEffect,useRef,useState } from 'react';
 import { BookOpen,Search,Sparkles,FileText,ShieldCheck,Settings,ArrowUp,ArrowUpRight,ChevronRight,X,Volume2,Square,Upload,Plus,LogOut,ChevronLeft,Menu,History,LoaderCircle,Library,CheckCircle2,LockKeyhole,ExternalLink } from 'lucide-react';
 import type { ChatResult,DocumentDetail,DocumentSummary,Evidence,SessionInfo } from '@/lib/types';
 import { useSpeech } from './speech';
+import { createClient } from '@supabase/supabase-js';
+import { uploadSchema,type UploadTicket } from '@/lib/upload';
 
 async function api<T>(url:string,options?:RequestInit):Promise<T>{const r=await fetch(url,{...options,headers:{...(options?.body instanceof FormData?{}:{'Content-Type':'application/json'}),...options?.headers}});const data=await r.json();if(!r.ok)throw new Error(data.error||'请求失败，请稍后重试。');return data;}
 type Message={role:'user'|'assistant';content:string;payload?:ChatResult|null;sources?:Evidence[]};
@@ -44,7 +46,20 @@ export default function Workspace(){
  }
  function freshChat(){if(asking)return;setMessages([]);setConversationId(undefined);setQuestion('');setChatOpen(true);}
  async function loadHistory(id:string){try{const r=await api<{messages:Message[]}>(`/api/conversations?id=${id}`);setMessages(r.messages);setConversationId(id);setChatOpen(true);}catch(e){setToast((e as Error).message);}}
- async function upload(file:File){if(uploading)return;setUploading(true);const form=new FormData();form.append('file',file);try{await api('/api/upload',{method:'POST',body:form});await refresh();setToast('已上传，后台处理完成后会进入待审核。');}catch(e){setToast((e as Error).message);}finally{setUploading(false);if(fileInput.current)fileInput.current.value='';}}
+ async function upload(file:File){if(uploading)return;setUploading(true);try{
+  if(file.size<=0||file.size>20*1024*1024)throw new Error('只支持 20 MB 以内的 PDF、DOCX、PPTX 文件。');
+  const buffer=await file.arrayBuffer();const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer)),b=>b.toString(16).padStart(2,'0')).join('');
+  const parsed=uploadSchema.safeParse({filename:file.name,size:file.size,mime:file.type,sha256:hash});if(!parsed.success)throw new Error('只支持 20 MB 以内的 PDF、DOCX、PPTX 文件，文件名不得超过 200 字符。');
+  const ticket=await api<UploadTicket>('/api/upload',{method:'POST',body:JSON.stringify(parsed.data)});
+  if(!ticket.alreadyUploaded){
+   const storage=createClient(ticket.url,ticket.publicKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}).storage.from('cpv-originals');
+   // A network error may arrive after Storage has committed the immutable object.
+   // Completion verifies the stored object and also supports interrupted uploads.
+   await storage.uploadToSignedUrl(ticket.path,ticket.token,file,{contentType:ticket.contentType}).catch(()=>null);
+  }
+  await api('/api/upload/complete',{method:'POST',body:JSON.stringify({id:ticket.id})});
+  await refresh();setToast('已上传，后台处理完成后会进入待审核。');
+ }catch(e){setToast((e as Error).message);}finally{setUploading(false);if(fileInput.current)fileInput.current.value='';}}
  async function docAction(action:string){if(!document)return;try{await api(`/api/documents/${document.id}`,{method:'PATCH',body:JSON.stringify({action})});await refresh();setDocument(null);setToast(action==='publish'?'资料已发布，可以参与问答。':action==='archive'?'资料已归档，不再参与问答。':'已重新加入处理队列。');}catch(e){setToast((e as Error).message);}}
  async function authenticate(event:React.FormEvent<HTMLFormElement>){event.preventDefault();setAuthBusy(true);const f=new FormData(event.currentTarget);try{await api('/api/auth',{method:'POST',body:JSON.stringify({action:setPassword?'password':'login',email:setPassword?undefined:f.get('email'),password:f.get('password')})});setSetPassword(false);window.history.replaceState({},'','/');await refresh();}catch(e){setToast((e as Error).message);}finally{setAuthBusy(false);}}
  const sourceButton=(source:Evidence,n?:number)=><button key={source.id} className="source-link" onClick={()=>openDocument(source.documentId,source.pairIds[0])}><span className="source-number">{n===undefined?<FileText size={13}/>:n+1}</span><span>{source.documentTitle}<small>{source.source} · v{source.version}</small></span><ArrowUpRight size={15}/></button>;

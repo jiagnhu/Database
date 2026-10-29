@@ -8,6 +8,8 @@
 
 ## 部署
 
+Vercel 托管网页、云服务器仅运行资料处理的部署方式，使用 `compose.worker.yaml`，见 [云端后台部署](cloud-worker.md)。下面的 `compose.yaml` 步骤适用于网页也放在服务器上的完整部署，不要在已有 Vercel 网站的机器上额外启动重复网页服务。
+
 1. 使用干净机器，安装 Docker Engine / Compose，准备域名、TLS 和 Supabase/百炼环境变量。中国大陆访问爱尔兰项目的连通性需用实际网络验证。
 2. 按用户要求，Supabase 保留公开注册和邮箱确认；新账号不会自动加入已有资料空间。完成本人 Auth 账号和 `bootstrap:owner`。项目已迁移时不要再执行 `schema.sql`。
 3. 将 `.env.local` 中 `APP_ORIGIN` 设为自己的 HTTPS 地址、`APP_MODE=connected`。确认两个密钥均配置。

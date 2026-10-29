@@ -1,11 +1,16 @@
 import unittest,sys,io,zipfile,os
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'worker'))
-from parsing import check_office,extract
+from parsing import check_office,extract,validate_file
 from run import validate_translations
 from transport import ProcessingError
 
 class WorkerContracts(unittest.TestCase):
+    def test_direct_upload_signature_and_size_checked_before_parsing(self):
+        for data,kind in [(b'<html>bad</html>','pdf'),(b'%PDF-1.7','docx'),(b'PK\x03\x04','exe'),(b'%PDF-'+bytes(20*1024*1024),'pdf')]:
+            with self.assertRaises(ProcessingError):validate_file(data,kind)
+        validate_file(b'%PDF-1.7\n','pdf')
+        validate_file(b'PK\x03\x04zip','docx')
     def test_zip_bomb_and_xml_entity_are_rejected(self):
         for name,data in [('large.xml',b'a'*4000000),('document.xml',b'<!DOCTYPE foo [<!ENTITY x SYSTEM "file:///x">]>')]:
             b=io.BytesIO()

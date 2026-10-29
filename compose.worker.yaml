@@ -1,0 +1,49 @@
+name: cpv-library
+services:
+  worker:
+    image: ${CPV_WORKER_IMAGE:-cpv-worker:local}
+    build: ./worker
+    env_file: .env.worker
+    environment:
+      CLAMAV_HOST: clamav
+      WORKER_POLL_SECONDS: 15
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 120s
+    read_only: true
+    tmpfs: ['/tmp:size=256m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    memswap_limit: 768m
+    cpus: 0.75
+    pids_limit: 128
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    healthcheck:
+      test: [CMD, python, -c, "import os,time; assert time.time()-os.stat('/tmp/cpv-worker-heartbeat').st_mtime < 600"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    depends_on:
+      clamav: {condition: service_healthy}
+  clamav:
+    image: ${CPV_CLAMAV_IMAGE:-clamav/clamav:1.4}
+    restart: unless-stopped
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+      - ./deploy/clamd.conf:/etc/clamav/clamd.conf:ro
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    memswap_limit: 3g
+    cpus: 0.5
+    pids_limit: 128
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    healthcheck:
+      test: [CMD, clamdscan, --ping, '3']
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 900s
+volumes:
+  clamav-signatures:

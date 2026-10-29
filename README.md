@@ -101,4 +101,4 @@ npm run build
 
 安全策略验证使用独立的本地 PostgreSQL 容器，绝不在真实项目上执行 `tests/database.sql`。完整过程见 [验证记录](docs/verification.md)。
 
-上传处理需启动 worker 与病毒扫描服务；仅启动网页时新上传文件会停在等待处理。生产容器配置和备份/恢复说明见 [运维手册](docs/operations.md)。当前未部署公网服务器，不要将开发服务器直接暴露到公网。
+上传处理需启动 worker 与病毒扫描服务；仅启动网页时新上传文件会停在等待处理。网站使用 Vercel 时，文件直接上传到私有存储，后台在独立云服务器处理。部署文件、资源要求与更新方式见 [云端后台部署](docs/cloud-worker.md)，备份/恢复说明见 [运维手册](docs/operations.md)。不要将本地开发服务器直接暴露到公网。
