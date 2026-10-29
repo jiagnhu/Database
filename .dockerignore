@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env*
+data
+test-results
+.cache
+__pycache__
+worker/__pycache__
+*.log
+*.tsbuildinfo

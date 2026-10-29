@@ -1,0 +1,25 @@
+# Put behind your TLS-enabled server block; never expose the Node port publicly.
+limit_req_zone $binary_remote_addr zone=cpv_api:10m rate=5r/s;
+limit_req_zone $binary_remote_addr zone=cpv_login:10m rate=5r/m;
+server {
+  listen 443 ssl;
+  server_name your-private-domain.example;
+  ssl_certificate /path/to/fullchain.pem;
+  ssl_certificate_key /path/to/privkey.pem;
+  client_max_body_size 21m;
+  client_body_timeout 30s;
+  location /api/auth {
+    limit_req zone=cpv_login burst=5 nodelay;
+    proxy_pass http://127.0.0.1:3100;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+  }
+  location / {
+    limit_req zone=cpv_api burst=20 nodelay;
+    proxy_pass http://127.0.0.1:3100;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_http_version 1.1;
+    proxy_read_timeout 120s;
+  }
+}
