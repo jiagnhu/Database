@@ -9,7 +9,7 @@
 ## 部署
 
 1. 使用干净机器，安装 Docker Engine / Compose，准备域名、TLS 和 Supabase/百炼环境变量。中国大陆访问爱尔兰项目的连通性需用实际网络验证。
-2. Supabase 的公开注册设为关闭。完成本人 Auth 账号和 `bootstrap:owner`。项目已迁移时不要再执行 `schema.sql`。
+2. 按用户要求，Supabase 保留公开注册和邮箱确认；新账号不会自动加入已有资料空间。完成本人 Auth 账号和 `bootstrap:owner`。项目已迁移时不要再执行 `schema.sql`。
 3. 将 `.env.local` 中 `APP_ORIGIN` 设为自己的 HTTPS 地址、`APP_MODE=connected`。确认两个密钥均配置。
 4. `docker compose config --quiet` 校验配置（不要输出完整配置到日志，以免打印密钥）。
 5. `docker compose build`，随后 `docker compose up -d`。网页端口只绑定宿主机回环地址；按 `deploy/nginx.conf.example` 配置 TLS 反向代理。
