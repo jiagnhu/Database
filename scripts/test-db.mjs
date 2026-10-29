@@ -16,7 +16,7 @@ create schema storage;create table storage.buckets(id text primary key,name text
 create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,primary key(id));
 alter table storage.objects enable row level security;grant usage on schema storage to authenticated,service_role;
 grant select,insert on storage.objects to authenticated;grant all on storage.objects to service_role;`);
-try{sql(fs.readFileSync('supabase/schema.sql','utf8'));sql(fs.readFileSync('tests/database.sql','utf8'));}
+try{for(const name of fs.readdirSync('supabase/migrations').filter(n=>n.endsWith('.sql')).sort())sql(fs.readFileSync('supabase/migrations/'+name,'utf8'));sql(fs.readFileSync('tests/database.sql','utf8'));sql(fs.readFileSync('tests/recycle-bin.sql','utf8'));}
 catch(e){console.error(e.stderr?.toString());process.exit(1);}
 // Two overlapping reservations must not both consume a 1000-token allowance.
 const reserve=()=>new Promise(resolve=>{const proc=spawn('docker',['exec','-i',container,'psql','-U','postgres','-d','cpv_contracts','-v','ON_ERROR_STOP=1','-q']);let err='';proc.stderr.on('data',b=>err+=b);proc.stdout.resume();proc.stdin.end(`set role service_role;select public.cpv_reserve('20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000003',gen_random_uuid(),600,'chat');`);proc.on('close',code=>resolve({code,err}));});
